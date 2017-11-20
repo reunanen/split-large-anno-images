@@ -51,34 +51,37 @@ int main(int argc, char** argv)
 
         std::cout << "Found " << files.size() << " files, now splitting ..." << std::endl;
 
+        const std::string result_file_suffix = "_result.png";
+
         for (const auto& file : files) {
 
             const std::string& full_name = file.full_name();
+            const std::string& name = file.name();
+            const auto is_result_file = name.length() >= result_file_suffix.length() && name.substr(name.length() - result_file_suffix.length()) == result_file_suffix;
+            const auto dot_pos = name.find('.');
 
-            std::cout << "Processing " << full_name;
+            if (!is_result_file && dot_pos != std::string::npos) {
 
-            cv::Mat image = cv::imread(full_name, cv::IMREAD_UNCHANGED);
+                std::cout << "Processing " << full_name;
 
-            if (!image.data) {
-                std::cout << " - unable to read, skipping...";
-            }
-            else {
-                std::cout
-                    << ", width = " << image.cols
-                    << ", height = " << image.rows
-                    << ", channels = " << image.channels()
-                    << ", type = 0x" << std::hex << image.type();
+                cv::Mat image = cv::imread(full_name, cv::IMREAD_UNCHANGED);
 
-                std::vector<tiling::opencv_tile> tiles = tiling::get_tiles(image.cols, image.rows, tiling_parameters);
+                if (!image.data) {
+                    std::cout << " - unable to read, skipping...";
+                }
+                else {
+                    std::cout
+                        << ", width = " << image.cols
+                        << ", height = " << image.rows
+                        << ", channels = " << image.channels()
+                        << ", type = 0x" << std::hex << image.type();
 
-                std::cout << ", tiles = " << std::dec << tiles.size();
+                    std::vector<tiling::opencv_tile> tiles = tiling::get_tiles(image.cols, image.rows, tiling_parameters);
 
-                const auto filename = file.name();
-                const auto dot_pos = filename.find('.');
+                    std::cout << ", tiles = " << std::dec << tiles.size();
 
-                if (dot_pos != std::string::npos) {
-                    const auto base_name = filename.substr(0, dot_pos);
-                    const auto extension = filename.substr(dot_pos);
+                    const auto base_name = name.substr(0, dot_pos);
+                    const auto extension = name.substr(dot_pos);
 
                     int i = 0;
 
