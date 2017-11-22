@@ -4,6 +4,8 @@
 #include "cxxopts/include/cxxopts.hpp"
 #include "tiling/opencv-wrapper.h"
 
+#include <omp.h>
+
 int main(int argc, char** argv)
 {
     if (argc == 1) {
@@ -64,7 +66,11 @@ int main(int argc, char** argv)
 
         const std::string mask_file_suffix = "_mask.png";
 
-        for (const auto& file : files) {
+        const int file_count = static_cast<int>(files.size());
+
+#pragma omp parallel for
+        for (int f = 0; f < file_count; ++f) {
+            const dlib::file& file = files[f];
 
             const std::string& full_name = file.full_name();
             const std::string& name = file.name();
@@ -72,7 +78,8 @@ int main(int argc, char** argv)
             const std::string mask_file_full_name = file.full_name() + mask_file_suffix;
             const std::string mask_file_name = file.name() + mask_file_suffix;
 
-            std::cout << "Processing " << full_name;
+            std::ostringstream oss;
+            oss << "Image " << full_name;
 
             const cv::Mat mask_image = cv::imread(mask_file_full_name, cv::IMREAD_UNCHANGED);
 
@@ -81,10 +88,10 @@ int main(int argc, char** argv)
                 const cv::Mat image = cv::imread(full_name, cv::IMREAD_UNCHANGED);
 
                 if (!image.data) {
-                    std::cout << " - unable to read image, skipping...";
+                    oss << " - unable to read image, skipping...";
                 }
                 else {
-                    std::cout
+                    oss
                         << ", width = " << image.cols
                         << ", height = " << image.rows
                         << ", channels = " << image.channels()
@@ -94,7 +101,7 @@ int main(int argc, char** argv)
 
                     std::vector<tiling::opencv_tile> tiles = tiling::get_tiles(image.cols, image.rows, tiling_parameters);
 
-                    std::cout << ", tiles = " << std::dec << tiles.size();
+                    oss << ", tiles = " << std::dec << tiles.size();
 
                     const auto dot_pos = name.find('.');
                     DLIB_CASSERT(dot_pos != std::string::npos);
@@ -133,12 +140,18 @@ int main(int argc, char** argv)
                             ++i;
                         }
                     }
+
+                    oss << ", with mask content = " << i;
                 }
             }
             else {
-                std::cout << " - unable to read mask, skipping...";
+                oss << " - unable to read mask, skipping...";
             }
-            std::cout << std::endl;
+
+#pragma omp critical
+            {
+                std::cout << oss.str() << std::endl;
+            }
         }
 
         return 0;
