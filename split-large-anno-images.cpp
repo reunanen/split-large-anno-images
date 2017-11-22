@@ -47,27 +47,41 @@ int main(int argc, char** argv)
             throw std::runtime_error("The input directory shouldn't equal the output directory");
         }
 
-        const std::vector<dlib::file> files = dlib::get_files_in_directory_tree(input_directory, dlib::match_endings(".jpeg .jpg .png"));
+        const std::vector<dlib::file> files = dlib::get_files_in_directory_tree(input_directory,
+            [](const dlib::file& name) {
+                if (dlib::match_ending("_mask.png")(name)) {
+                    return false;
+                }
+                if (dlib::match_ending("_result.png")(name)) {
+                    return false;
+                }
+                return dlib::match_ending(".jpeg")(name)
+                    || dlib::match_ending(".jpg")(name)
+                    || dlib::match_ending(".png")(name);
+            });
 
         std::cout << "Found " << files.size() << " files, now splitting ..." << std::endl;
 
-        const std::string result_file_suffix = "_result.png";
+        const std::string mask_file_suffix = "_mask.png";
 
         for (const auto& file : files) {
 
             const std::string& full_name = file.full_name();
             const std::string& name = file.name();
-            const auto is_result_file = name.length() >= result_file_suffix.length() && name.substr(name.length() - result_file_suffix.length()) == result_file_suffix;
-            const auto dot_pos = name.find('.');
 
-            if (!is_result_file && dot_pos != std::string::npos) {
+            const std::string mask_file_full_name = file.full_name() + mask_file_suffix;
+            const std::string mask_file_name = file.name() + mask_file_suffix;
 
-                std::cout << "Processing " << full_name;
+            std::cout << "Processing " << full_name;
 
-                cv::Mat image = cv::imread(full_name, cv::IMREAD_UNCHANGED);
+            const cv::Mat mask_image = cv::imread(mask_file_full_name, cv::IMREAD_UNCHANGED);
+
+            if (!mask_image.empty()) {
+
+                const cv::Mat image = cv::imread(full_name, cv::IMREAD_UNCHANGED);
 
                 if (!image.data) {
-                    std::cout << " - unable to read, skipping...";
+                    std::cout << " - unable to read image, skipping...";
                 }
                 else {
                     std::cout
@@ -76,25 +90,54 @@ int main(int argc, char** argv)
                         << ", channels = " << image.channels()
                         << ", type = 0x" << std::hex << image.type();
 
+                    DLIB_CASSERT(image.size() == mask_image.size());
+
                     std::vector<tiling::opencv_tile> tiles = tiling::get_tiles(image.cols, image.rows, tiling_parameters);
 
                     std::cout << ", tiles = " << std::dec << tiles.size();
 
+                    const auto dot_pos = name.find('.');
+                    DLIB_CASSERT(dot_pos != std::string::npos);
+
                     const auto base_name = name.substr(0, dot_pos);
                     const auto extension = name.substr(dot_pos);
+
+                    const auto dot_pos_mask = mask_file_name.find('.');
+                    DLIB_CASSERT(dot_pos_mask != std::string::npos);
+
+                    const auto mask_base_name = mask_file_name.substr(0, dot_pos_mask);
+                    const auto mask_extension = mask_file_name.substr(dot_pos_mask);
+
+                    DLIB_CASSERT(base_name == mask_base_name);
 
                     int i = 0;
 
                     for (const auto& tile : tiles) {
-                        cv::Mat t = image(tile.full_rect);
+                        const cv::Mat m = mask_image(tile.full_rect);
 
-                        std::ostringstream output_filename;
-                        output_filename << output_directory << "/" << base_name << "_" << i++ << extension;
-                        cv::imwrite(output_filename.str(), t);
+                        const cv::Scalar mean = cv::mean(m);
+
+                        if (mean[0] > 0 || mean[1] > 0 || mean[2] > 0 || mean[3] > 0) {
+                            const cv::Mat t = image(tile.full_rect);
+
+                            DLIB_CASSERT(t.size() == m.size());
+
+                            std::ostringstream output_filename;
+                            output_filename << output_directory << "/" << base_name << "_" << i << extension;
+                            cv::imwrite(output_filename.str(), t);
+
+                            std::ostringstream mask_output_filename;
+                            mask_output_filename << output_directory << "/" << mask_base_name << "_" << i << mask_extension;
+                            cv::imwrite(mask_output_filename.str(), m);
+
+                            ++i;
+                        }
                     }
                 }
             }
-
+            else {
+                std::cout << " - unable to read mask, skipping...";
+            }
             std::cout << std::endl;
         }
 
