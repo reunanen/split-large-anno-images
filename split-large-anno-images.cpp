@@ -24,6 +24,7 @@ int main(int argc, char** argv)
         ("h,max-tile-height", "Max tile width", cxxopts::value<int>()->default_value("1024"))
         ("x,overlap-x", "Overlap in X", cxxopts::value<int>()->default_value("257"))
         ("y,overlap-y", "Overlap in Y", cxxopts::value<int>()->default_value("257"))
+        ("f,result-image-format", "Result image format (for example, .jpg) - leave empty to use source image format", cxxopts::value<std::string>());
         ;
 
     try {
@@ -109,6 +110,15 @@ int main(int argc, char** argv)
                     const auto base_name = name.substr(0, dot_pos);
                     const auto extension = name.substr(dot_pos);
 
+                    const auto get_result_image_format = [&options, &extension]() {
+                        if (options.count("result-image-format") > 0) {
+                            return options["result-image-format"].as<std::string>();
+                        }
+                        else {
+                            return extension;
+                        }
+                    };
+
                     const auto dot_pos_mask = mask_file_name.find('.');
                     DLIB_CASSERT(dot_pos_mask != std::string::npos);
 
@@ -130,7 +140,7 @@ int main(int argc, char** argv)
                             DLIB_CASSERT(t.size() == m.size());
 
                             std::ostringstream output_filename;
-                            output_filename << output_directory << "/" << base_name << "_" << i << extension;
+                            output_filename << output_directory << "/" << base_name << "_" << i << get_result_image_format();
                             cv::imwrite(output_filename.str(), t);
 
                             std::ostringstream mask_output_filename;
